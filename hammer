@@ -3,97 +3,170 @@
 //|                                  Copyright 2023, MetaQuotes Ltd. |
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
-void OnTick()
+#include <Trade\Trade.mqh>
+CTrade trade;
+
+input int  Take = 200 ;
+input int  Stop = 100 ;
+
+
+int OnInit()
 {
-   getHammer(
-   0.07, // 7% size's candle
-   0.7   // 70% size's candle
-   );
+    // ChartSetInteger(0, CHART_COLOR_BACKGROUND, clrWhite);
+    ChartSetInteger(0, CHART_SHOW_GRID, false); 
+    Init_myLine();
+    Init_myLine2();
+    return(INIT_SUCCEEDED);
 }
 
-int getHammer(double smallShadowRatio, double longShadowRatio)
+void OnTick()
+{
+   double candleSize = 0;
+   int hammerDetected = getHammer(0.07, 0.7, candleSize);
+   
+   if (hammerDetected == 1)
+   {
+       SendOrder(candleSize); // Passa o tamanho do candle para a função SendOrder()
+;
+   }
+}
+
+bool SendOrder(double candleSize)
+{ 
+    if (PositionSelect(_Symbol))
+    {
+        // Coloque aqui a lógica para a posição já aberta
+    }
+    else
+    {
+       double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+       double stopLoss = ask - (candleSize * 2); // Duplica o tamanho do candleSize para o stop loss
+       trade.Buy(0.01, NULL, ask, stopLoss, ask + (Take * _Point), NULL);
+    }
+    return true;
+}
+
+
+int getHammer(double smallShadowRatio, double longShadowRatio, double outCandleSize)
 {
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
    
    if (CopyRates(_Symbol, PERIOD_CURRENT, 1, 1, rates) > 0)
    {
+      double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+     
+      ObjectMove(_Symbol, "linha", 0, 0, ask); // Atualiza a posição da linha "linha" de acordo com o preço de ask
+      
+      
       datetime time = rates[0].time;
       double open = rates[0].open;
       double high = rates[0].high;
-      double low = rates[0].low;
       double close = rates[0].close;
+      double low = rates[0].low;
       double candleSize = high - low;
+      double outCandleSize = candleSize;
+      Comment(
+      "Valor de low:", low,
+      "\nEntrada:", ask + (Take * _Point) , 
+      "\ncandleSize:", candleSize, 
+      "\nStop:", ask - (candleSize * 2));
+
+      ObjectMove(_Symbol, "linha2", 0, 0, low); // Atualiza a posição da linha "linha2" de acordo com o valor de low
       
-   if(open<close) //candle de alta
-     {
-      if(high-close < candleSize*smallShadowRatio)//se sommbra superior é menor que 7%
-        {
-         if(open-low>candleSize*longShadowRatio) //se sommbra inferior é maior que 70%
-            createObj(time,low,217, clrGreen,"Hammer");
-           {
-            return 1;
-           }
-        }
-     }
-   if(open>close) //candle de baixa
-     {
-      if(high-open<candleSize*smallShadowRatio)
-        {
-         if(close-low>candleSize*longShadowRatio)
-            createObj(time,high,218,clrGreen,"Hammer");
-           {
-            return 1;
-           }
-        }
-     }
-   if(open<close) //candle de alta
-     {
-      if(open-low < candleSize*smallShadowRatio)
-        {
-         if(high-close>candleSize*longShadowRatio)
-            createObj(time,low,217, clrRed,"Inverted Hammer");
-           {
-            return -1;
-           }
-        }
-     }
-   if(open>close) //candle de baixa
-     {
-      if(close-low < candleSize*smallShadowRatio)
-        {
-         if(high-open>candleSize*longShadowRatio)
-            createObj(time,high,218, clrRed,"Inverted Hammer");
-           {
-            return -1;
-           }
-        }
-     }
-   return 0;
+      
+      
+      if (open < close) // candle de alta
+      {
+         if (high - close < candleSize * smallShadowRatio) // se sombra superior é menor que 7%
+         {
+            if (open - low > candleSize * longShadowRatio) // se sombra inferior é maior que 70%
+            {
+               createObj(time, low, 217, clrGreen, "Hammer");
+               SendOrder(candleSize); // Passa o tamanho do candle para a função SendOrder()
+
+               
+    
+               return 1;
+            }
+         }
+      }
+      
+      if (open > close) // candle de baixa
+      {
+         if (high - open < candleSize * smallShadowRatio)
+         {
+            if (close - low > candleSize * longShadowRatio)
+            {
+               createObj(time, high, 218, clrGreen, "Hammer");
+               return 1;
+            }
+         }
+      }
+      
+      if (open < close) // candle de alta
+      {
+         if (open - low < candleSize * smallShadowRatio)
+         {
+            if (high - close > candleSize * longShadowRatio)
+            {
+               createObj(time, low, 217, clrRed, "Inverted Hammer");
+               return -1;
+            }
+         }
+      }
+      
+      if (open > close) // candle de baixa
+      {
+         if (close - low < candleSize * smallShadowRatio)
+         {
+            if (high - open > candleSize * longShadowRatio)
+            {
+               createObj(time, high, 218, clrRed, "Inverted Hammer");
+               return -1;
+            }
+         }
+      }
    }
-    return 0;
-   }
-  
-     
    
+   return 0;
+}
+
+void Init_myLine()
+{
+    ObjectCreate(_Symbol, "linha", OBJ_HLINE, 0, 0, 0);
+    ObjectSetInteger(0, "linha", OBJPROP_COLOR, clrWhite);
+    ObjectSetInteger(0, "linha", OBJPROP_WIDTH, 1);
+}
+
+void Init_myLine2()
+{
+    ObjectCreate(_Symbol, "linha2", OBJ_HLINE, 0, 0, 0);
+    ObjectSetInteger(0, "linha2", OBJPROP_COLOR, clrRed);
+    ObjectSetInteger(0, "linha2", OBJPROP_WIDTH, 1);
+}
 
 void createObj(datetime time, double price, int arrawCode, color clr, string txt)
-  {
+{
    string objName=" ";
-   StringConcatenate(objName, "Signal@",time, "at",DoubleToString(price,_Digits),"(",arrawCode,")");
-   if(ObjectCreate(0,objName,OBJ_ARROW,0,time,price))
-     {
-      ObjectSetInteger(0,objName,OBJPROP_ARROWCODE,arrawCode);
-      ObjectSetInteger(0,objName,OBJPROP_COLOR,clr);
-      if(clr==clrGreen)
-         ObjectSetInteger(0,objName,OBJPROP_ANCHOR,ANCHOR_TOP);
-      if(clr==clrRed)
-         ObjectSetInteger(0,objName,OBJPROP_ANCHOR,ANCHOR_BOTTOM);
-     }
-   string candleName=objName+txt;
-   if(ObjectCreate(0,candleName,OBJ_TEXT,0,time,price))
-     {
-      ObjectSetString(0,candleName,OBJPROP_TEXT," "+txt);
-      ObjectSetInteger(0,candleName,OBJPROP_COLOR,clr);
-     }
-  }
+   StringConcatenate(objName, "Signal@", time, "at", DoubleToString(price, _Digits), "(", arrawCode, ")");
+   
+   if (ObjectCreate(0, objName, OBJ_ARROW, 0, time, price))
+   {
+      ObjectSetInteger(0, objName, OBJPROP_ARROWCODE, arrawCode);
+      ObjectSetInteger(0, objName, OBJPROP_COLOR, clr);
+      
+      if (clr == clrGreen)
+         ObjectSetInteger(0, objName, OBJPROP_ANCHOR, ANCHOR_TOP);
+      if (clr == clrRed)
+         ObjectSetInteger(0, objName, OBJPROP_ANCHOR, ANCHOR_BOTTOM);
+   }
+   
+   string candleName = objName + txt;
+   
+   if (ObjectCreate(0, candleName, OBJ_TEXT, 0, time, price))
+   {
+      ObjectSetString(0, candleName, OBJPROP_TEXT, " " + txt);
+      ObjectSetInteger(0, candleName, OBJPROP_COLOR, clr);
+   }
+}
